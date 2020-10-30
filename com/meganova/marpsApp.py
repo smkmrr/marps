@@ -3,7 +3,9 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 
-class MarpsApp(App):
+
+class MarpsApp (App):
+
     def build(self):
         l1 = Label(text="Welcome to A Village!")
         now = datetime.datetime.now()
