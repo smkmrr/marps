@@ -1,15 +1,9 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import datetime
-
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 
-class FirstKivy(App):
-
+class MarpsApp(App):
     def build(self):
         l1 = Label(text="Welcome to A Village!")
         now = datetime.datetime.now()
@@ -22,7 +16,3 @@ class FirstKivy(App):
         layout.add_widget(l2)
         layout.add_widget(l3)
         return layout
-
-
-FirstKivy().run()
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
