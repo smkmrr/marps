@@ -1,6 +1,4 @@
 
-#from com.meganova.marpsApp import MarpsApp
-import mysql as mysql
 from kivy.clock import Clock
 from datetime import timedelta
 from datetime import datetime
@@ -58,9 +56,14 @@ class CartPage(GridLayout):
         self.add_widget(self.message)
 
     # Called with a message, to update message text in widget
-    def update_info(self, message):
+    def update_rfId(self, message):
         self.message.text = message
 
+    def update_company_name(self, message):
+        self.message.text = message
+
+    def update_company_code(self, message):
+        self.message.company_code = message
     # Called on label width update, so we can set text width properly - to 90% of label width
     def update_text_width(self, *_):
         self.message.text_size = (self.message.width * 0.9, None)
@@ -92,7 +95,9 @@ class MarpsApp(App):
             self.screen_manager.current = "Welcome"
         else:
             self.screen_manager.current = "Cart"
-            self.cart_page.update_info(session["rfId"])
+            self.cart_page.update_rfId(session["rfId"])
+            self.cart_page.update_company_name(session["company_name"])
+            # self.cart_page.update_company_code(session["company_code"])
 
 
 class RfReader():
@@ -104,11 +109,13 @@ class RfReader():
     def on_press(self, key):
         self.key_list.append(key)
 
-        if len(self.key_list) % 11 == 0:
+        step = 0
+        if len(self.key_list) % 11 == 0 & step == 0:
             self.convert()
             self.key_list = []
             self.totalCount += 1
             print( "card read count: " + str(self.totalCount))
+            step = 1
             marps_app.changePage()
 
     def convert(self):
@@ -116,39 +123,91 @@ class RfReader():
             self.result +=  str(self.key_list[idx]).replace("'", "")
 
         session["rfId"] = self.result
+        session["company_name"] = database.getCompanyNameByRfId(session["rfId"])
+        # session["company_code"] = database.getCompanyCodeByRfId(session["rfId"])
         print (self.result)
         self.result = ""
 
+import pgdb
+
+class PostgresDb():
+    def __init__(self, **kwargs):
+        self.connection = pgdb.connect(host="localhost", user="postgres", password="12", database="marps_db")
+        self.initDb()
+
+        # myConnection.close()
+
+    def getCompanyNameByRfId(self, rfId):
+        cur = self.connection.cursor()
+        cur.execute("select companyId from villager where rfId='"+rfId+"'")
+        companyid = cur.fetchone()
+        cur.execute("select name from company where id="+str(companyid[0]))
+        return cur.fetchone()[0]
 
 
-class mydatabase():
+    # def getCompanyCodeByRfId(self, rfId):
+    #     cur = self.connection.cursor()
+    #     cur.execute("select id from villager where rfId='"+rfId+"'")
+    #     companyid = cur.fetchone()
+    #     cur.execute("select code from company where id=" + str(companyid[0]))
+    #     return cur.fetchone()[0]
 
-    def __init__(self):
-        self.db = mysql.connector.connect(**config)
-        self.c = self.db.cursor()
+    def initDb(self) :
+        cur = self.connection.cursor()
+        cur.execute("""SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'""")
+        tabels = len(cur.fetchall())
+        print(tabels)
+        if tabels == 0 :
+            insert = """CREATE TABLE company (
+                id integer PRIMARY KEY,
+                name VARCHAR ( 50 ) UNIQUE,
+                code NUMERIC ( 10 ) NOT NULL,
+                email VARCHAR ( 255 ) UNIQUE,
+                created_on TIMESTAMP NOT NULL
+            );
+            CREATE TABLE villager (
+                id integer PRIMARY KEY,
+                name VARCHAR ( 50 ) UNIQUE,
+                rfId VARCHAR ( 10 ) NOT NULL,
+                companyId integer not null references company(id),
+                created_on TIMESTAMP NOT NULL
+            );
+        
+        
+            INSERT INTO company(id, name, code, email, created_on) VALUES ( 102, 'Meganova', 1002, 'info@meganova.se', NOW());
+            INSERT INTO company(id, name, code, email, created_on) VALUES ( 101, 'A Village', 1001, 'info@avillage.se', NOW());
+            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (123, 'Ali Akyel', '0000792099', 102, NOW());
+            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (124, 'Deniz Ozen', '0005713678', 102, NOW());
+            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (127, 'Mesut Yilmaz', '0005728272', 101, NOW());"""
 
-    def get_rows(self):
-        # a,b,c,d depence of your database structure and tables
-        # use the query example below, query needs parenthesis obligated
+            cur.execute(insert)
+            self.connection.commit()
 
-        query = ('SELECT {} FROM {} WHERE({}='')'.format("a", "b", "c", "d"))
-        self.c.execute(query)
-        return self.c.fetchall()
+    #postgreSQL_select_Query = "insert into mobile (id, model) values (123, 123);"
+    #cur.execute(postgreSQL_select_Query)
+    #conn.commit()
 
-config = {'user': 'postgres',
-          'password': 'mysecretpassword',
-          'host': 'localhost:5432',
-          'database': 'marps_db',
-          'raise_on_warnings': True}
+    # cur.execute( "SELECT \"id\",\"name\" FROM company;")
+    # for name in cur.fetchall() :
+    #     print( name )
+    #
+    # cur.execute("""SELECT table_name FROM information_schema.tables
+    #    WHERE table_schema = 'public'""")
+    # print("publicler lar:")
+    # for table in cur.fetchall():
+    #     print(table)
+
 
 marps_app = None
 session = { }
+database = None
 
 if __name__ == "__main__":
+    database = PostgresDb()
     reader = RfReader()
     listener = keyboard.Listener(on_press=reader.on_press)
     listener.start()  # start to listen on a separate thread
- #   usbListener = UsbListener()
+
     marps_app = MarpsApp()
     marps_app.run()
 
