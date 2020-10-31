@@ -1,5 +1,6 @@
 
 #from com.meganova.marpsApp import MarpsApp
+import mysql as mysql
 from kivy.clock import Clock
 from datetime import timedelta
 from datetime import datetime
@@ -137,8 +138,9 @@ class mydatabase():
 config = {'user': 'postgres',
           'password': 'mysecretpassword',
           'host': 'localhost:5432',
-          'database': 'insert_database_name',
+          'database': 'marps_db',
           'raise_on_warnings': True}
+
 marps_app = None
 session = { }
 
