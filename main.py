@@ -1,11 +1,10 @@
-
-from kivy.clock import Clock
-from datetime import timedelta
 from datetime import datetime
-import kivy
+from datetime import timedelta
+
 from kivy.app import App
-from kivy.uix.label import Label
+from kivy.clock import Clock
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.label import Label
 from kivy.uix.screenmanager import ScreenManager, Screen
 from pynput import keyboard
 
@@ -64,6 +63,7 @@ class CartPage(GridLayout):
 
     def update_company_code(self, message):
         self.message.company_code = message
+
     # Called on label width update, so we can set text width properly - to 90% of label width
     def update_text_width(self, *_):
         self.message.text_size = (self.message.width * 0.9, None)
@@ -91,7 +91,7 @@ class MarpsApp(App):
         return self.screen_manager
 
     def changePage(self):
-        if self.screen_manager.current == "Cart" :
+        if self.screen_manager.current == "Cart":
             self.screen_manager.current = "Welcome"
         else:
             self.screen_manager.current = "Cart"
@@ -114,19 +114,20 @@ class RfReader():
             self.convert()
             self.key_list = []
             self.totalCount += 1
-            print( "card read count: " + str(self.totalCount))
+            print("card read count: " + str(self.totalCount))
             step = 1
             marps_app.changePage()
 
     def convert(self):
         for idx, val in enumerate(self.key_list[0:10]):
-            self.result +=  str(self.key_list[idx]).replace("'", "")
+            self.result += str(self.key_list[idx]).replace("'", "")
 
         session["rfId"] = self.result
         session["company_name"] = database.getCompanyNameByRfId(session["rfId"])
         # session["company_code"] = database.getCompanyCodeByRfId(session["rfId"])
-        print (self.result)
+        print(self.result)
         self.result = ""
+
 
 import pgdb
 
@@ -139,11 +140,10 @@ class PostgresDb():
 
     def getCompanyNameByRfId(self, rfId):
         cur = self.connection.cursor()
-        cur.execute("select companyId from villager where rfId='"+rfId+"'")
+        cur.execute("select companyId from villager where rfId='" + rfId + "'")
         companyid = cur.fetchone()
-        cur.execute("select name from company where id="+str(companyid[0]))
+        cur.execute("select name from company where id=" + str(companyid[0]))
         return cur.fetchone()[0]
-
 
     # def getCompanyCodeByRfId(self, rfId):
     #     cur = self.connection.cursor()
@@ -152,12 +152,12 @@ class PostgresDb():
     #     cur.execute("select code from company where id=" + str(companyid[0]))
     #     return cur.fetchone()[0]
 
-    def initDb(self) :
+    def initDb(self):
         cur = self.connection.cursor()
         cur.execute("""SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'""")
         tabels = len(cur.fetchall())
         print(tabels)
-        if tabels == 0 :
+        if tabels == 0:
             insert = """CREATE TABLE company (
                 id integer PRIMARY KEY,
                 name VARCHAR ( 50 ) UNIQUE,
@@ -184,9 +184,9 @@ class PostgresDb():
             cur.execute(insert)
             self.connection.commit()
 
-    #postgreSQL_select_Query = "insert into mobile (id, model) values (123, 123);"
-    #cur.execute(postgreSQL_select_Query)
-    #conn.commit()
+    # postgreSQL_select_Query = "insert into mobile (id, model) values (123, 123);"
+    # cur.execute(postgreSQL_select_Query)
+    # conn.commit()
 
     # cur.execute( "SELECT \"id\",\"name\" FROM company;")
     # for name in cur.fetchall() :
@@ -200,7 +200,7 @@ class PostgresDb():
 
 
 marps_app = None
-session = { }
+session = {}
 database = None
 
 if __name__ == "__main__":
@@ -211,5 +211,3 @@ if __name__ == "__main__":
 
     marps_app = MarpsApp()
     marps_app.run()
-
-
