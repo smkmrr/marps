@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timedelta
+import time
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -35,6 +36,20 @@ class WelcomePage(GridLayout):
         self.now = self.now + timedelta(seconds=1)
         self.my_label.text = self.now.strftime('%H:%M:%S')
 
+
+class ErrorPage(GridLayout):
+    # runs on initialization
+    def __init__(self, message, **kwargs):
+        super().__init__(**kwargs)
+
+        self.cols = 1  # used for our grid
+
+        error = Label(text=message)
+        self.error = error
+        self.add_widget(error)  # widget #1, top left
+    # Called with a message, to update message text in widget
+    def update_message(self, message):
+        self.error.text = message
 
 class CartPage(GridLayout):
     def __init__(self, **kwargs):
@@ -87,6 +102,12 @@ class MarpsApp(App):
         screen = Screen(name='Cart')
         screen.add_widget(self.cart_page)
         self.screen_manager.add_widget(screen)
+
+        self.error_page = ErrorPage("Empty")
+        screen = Screen(name='Error')
+        screen.add_widget(self.error_page)
+        self.screen_manager.add_widget(screen)
+
         self.screen_manager.current = "Welcome"
         return self.screen_manager
 
@@ -99,6 +120,12 @@ class MarpsApp(App):
             self.cart_page.update_company_name(session["company_name"])
             # self.cart_page.update_company_code(session["company_code"])
 
+    def errorPage(self, message):
+        self.error_page.update_message(message)
+        self.screen_manager.current = "Error"
+        time.sleep(3)
+        self.screen_manager.current = "Welcome"
+
 
 class RfReader():
     def __init__(self, **kwargs):
@@ -109,13 +136,19 @@ class RfReader():
     def on_press(self, key):
         self.key_list.append(key)
 
-        step = 0
-        if len(self.key_list) % 11 == 0 & step == 0:
-            self.convert()
+        if len(self.key_list) % 11 == 0:
+            try:
+                self.convert()
+            except:
+                marps_app.errorPage("No Company Record Found")
+                self.result = ""
+                self.key_list = []
+                self.totalCount += 1
+                return
+            self.result = ""
             self.key_list = []
             self.totalCount += 1
             print("card read count: " + str(self.totalCount))
-            step = 1
             marps_app.changePage()
 
     def convert(self):
@@ -125,23 +158,27 @@ class RfReader():
         session["rfId"] = self.result
         session["company_name"] = database.getCompanyNameByRfId(session["rfId"])
         # session["company_code"] = database.getCompanyCodeByRfId(session["rfId"])
-        print(self.result)
-        self.result = ""
+
 
 
 import pgdb
 
+
 class PostgresDb():
     def __init__(self, **kwargs):
-        self.connection = pgdb.connect(host="localhost", user="postgres", password="12", database="marps_db")
+        self.connection = pgdb.connect(host="localhost", user="marps_db_user", password="marps_db_pass",
+                                       database="marps_db")
         self.initDb()
-
         # myConnection.close()
 
     def getCompanyNameByRfId(self, rfId):
         cur = self.connection.cursor()
+        print("RFID:", rfId)
         cur.execute("select companyId from villager where rfId='" + rfId + "'")
         companyid = cur.fetchone()
+        print("company Id found:", companyid)
+        if companyid is None:
+            raise Exception("No company record found")
         cur.execute("select name from company where id=" + str(companyid[0]))
         return cur.fetchone()[0]
 
@@ -158,6 +195,7 @@ class PostgresDb():
         tabels = len(cur.fetchall())
         print(tabels)
         if tabels == 0:
+            print('::::::::::::tables will be created')
             insert = """CREATE TABLE company (
                 id integer PRIMARY KEY,
                 name VARCHAR ( 50 ) UNIQUE,
@@ -177,13 +215,14 @@ class PostgresDb():
                 created_on TIMESTAMP NOT NULL
             );
         
-            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (123, 'Ali Akyel', '0000792099', 102, NOW());
+            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (123, 'Ali Akyel', '0000792099', 102, NOW());            
             INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (124, 'Deniz Ozen', '0005713678', 102, NOW());
             INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (127, 'Mesut Yilmaz', '0005728272', 101, NOW());"""
 
             cur.execute(insert)
             self.connection.commit()
-
+        else:
+            print('::::::::::::tables are already there')
     # postgreSQL_select_Query = "insert into mobile (id, model) values (123, 123);"
     # cur.execute(postgreSQL_select_Query)
     # conn.commit()

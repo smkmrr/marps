@@ -13,3 +13,5 @@ sudo docker run --name marps_db -e POSTGRES_PASSWORD=pwd123 -p 5432:5432 -v /hom
 #OR
 . prepare_run_db.sh
 
+#pgAdmin
+http://localhost:5050/browser/#

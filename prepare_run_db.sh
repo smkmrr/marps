@@ -1,5 +1,7 @@
 #!/bin/sh
+docker stop marps_db
+docker rm -f marps_db
+docker network create pg
+docker build . -t marps_db:1.0.0
+docker run --name marps_db --network=pg -p 5432:5432 -v marps_db:/var/lib/postgresql/data -d marps_db:1.0.0
 
-sudo docker build . -t marps_db:1.0.0
-sudo #docker rm -f $(docker ps -a -q)
-sudo docker run --name marps_db -e POSTGRES_PASSWORD=12 -e POSTGRES_USER=postgres -e POSTGRES_DB=marps_db  -p 5432:5432  -d marps_db:1.0.0
