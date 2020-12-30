@@ -7,11 +7,15 @@ from kivy.clock import Clock
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
-from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from pynput import keyboard
 import gpiozero
 
+marps_app = None
+session = {}
+currentPage = "Welcome"
+database = None
+fridge = None
 
 class WelcomePage(GridLayout):
     # runs on initialization
@@ -137,11 +141,6 @@ class MarpsApp(App):
         screen.add_widget(self.co_page)
         self.screen_manager.add_widget(screen)
 
-        self.ty_page = ThankYouPage()
-        screen = Screen(name='ThankYou')
-        screen.add_widget(self.ty_page)
-        self.screen_manager.add_widget(screen)
-
         self.screen_manager.current = "Welcome"
         return self.screen_manager
 
@@ -151,16 +150,18 @@ class MarpsApp(App):
         return True
 
     def changePage(self):
+        global currentPage
         if self.screen_manager.current == "Checkout":
             print("checkout -to- welcome")
-            self.screen_manager.current = "Welcome"
             self.resetSession()
         elif self.screen_manager.current == "Cart":
             print("cart -to- checkout")
             self.screen_manager.current = "Checkout"
+            currentPage = "Checkout"
         elif self.screen_manager.current == "Welcome":
             print("welcome -to- cart")
             self.screen_manager.current = "Cart"
+            currentPage = "Cart"
             self.cart_page.update_rfId(session["rfId"])
             self.cart_page.update_company_name(session["company_name"])
             fridge.unlock()
@@ -169,11 +170,16 @@ class MarpsApp(App):
             self.errorPage("No page found returning to Welcome")
 
     def getCartPage(self):
-            self.screen_manager.current = "Cart"
+        global currentPage
+        currentPage = "Cart"
+        self.screen_manager.current = "Cart"
 
     def resetSession(self):
+        global currentPage
+        self.screen_manager.current = "Welcome"
         session["rfId"] = None
         session["company_name"] = None
+        currentPage = "Welcome"
         fridge.lock()
 
     def errorPage(self, message):
@@ -183,7 +189,7 @@ class MarpsApp(App):
         self.screen_manager.current = "Welcome"
 
 
-class RfReader():
+class KeyboardReader():
     def __init__(self, **kwargs):
         self.key_list = []
         self.result = ""
@@ -191,8 +197,9 @@ class RfReader():
 
     def on_press(self, key):
         self.key_list.append(key)
-
-        if len(self.key_list) % 11 == 0:
+        global currentPage
+        if len(self.key_list) % 11 == 0 and currentPage == "Welcome":
+            print("11 Welcome")
             try:
                 self.convert()
             except:
@@ -206,6 +213,33 @@ class RfReader():
             self.totalCount += 1
             print("card read count: " + str(self.totalCount))
             marps_app.changePage()
+        elif len(self.key_list) % 14 == 0 and currentPage == "Cart":
+            print("13 Cart")
+            try:
+                self.convertAndAddProduct()
+            except:
+                print("No Product Found")
+                self.result = ""
+                self.key_list = []
+                self.totalCount += 1
+                return
+        elif currentPage == "Checkout":
+            self.key_list = []
+
+
+    def convertAndAddProduct(self):
+        for idx, val in enumerate(self.key_list[0:13]):
+            self.result += str(self.key_list[idx]).replace("'", "")
+
+        product = database.getProductByBarcode(self.result)
+        if product is None:
+            raise Exception("No Product Found")
+        self.addProduct(product)
+        # session["company_code"] = database.getCompanyCodeByRfId(session["rfId"])
+
+    def addProduct(self, product):
+        print("will add product with name:", product.name)
+        pass
 
     def convert(self):
         for idx, val in enumerate(self.key_list[0:10]):
@@ -236,12 +270,16 @@ class PostgresDb():
         cur.execute("select name from company where id=" + str(companyid[0]))
         return cur.fetchone()[0]
 
-    # def getCompanyCodeByRfId(self, rfId):
-    #     cur = self.connection.cursor()
-    #     cur.execute("select id from villager where rfId='"+rfId+"'")
-    #     companyid = cur.fetchone()
-    #     cur.execute("select code from company where id=" + str(companyid[0]))
-    #     return cur.fetchone()[0]
+    def getProductByBarcode(self, barcode):
+        cur = self.connection.cursor()
+        print("BARCODE:", barcode)
+        cur.execute("select name from product where barcode='" + barcode + "'")
+        product = cur.fetchone()
+        print("product found:", product)
+        if product is None:
+            raise Exception("No product record found")
+        return cur.fetchone()[0]
+
 
     def initDb(self):
         cur = self.connection.cursor()
@@ -271,8 +309,19 @@ class PostgresDb():
         
             INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (123, 'Ali Akyel', '0000792099', 102, NOW());            
             INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (124, 'Deniz Ozen', '0005713678', 102, NOW());
-            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (127, 'Mesut Yilmaz', '0005728272', 101, NOW());"""
-
+            INSERT INTO villager(id, name, rfId, companyId, created_on) VALUES (127, 'Mesut Yilmaz', '0005728272', 101, NOW());
+            
+            CREATE TABLE product (
+                id integer PRIMARY KEY,
+                name VARCHAR ( 50 ) UNIQUE,
+                barcode VARCHAR ( 13 ) NOT NULL,
+                price numeric(4,2) NOT NULL,
+                created_on TIMESTAMP NOT NULL
+            );
+            INSERT INTO product(id, name, barcode, price, created_on) VALUES (1, 'Beypazari Maden Suyu', '8691381000011', 1.15, NOW());
+            
+            
+            """
             cur.execute(insert)
             self.connection.commit()
         else:
@@ -313,17 +362,14 @@ class Fridge():
         self.relay2.on()
 
 
-marps_app = None
-session = {}
-database = None
-fridge = None
-
 if __name__ == "__main__":
     database = PostgresDb()
-    reader = RfReader()
+    reader = KeyboardReader()
     fridge = Fridge()
     listener = keyboard.Listener(on_press=reader.on_press)
-    listener.start()  # start to listen on a separate thread
+    listener.start()
+
+    # start to listen on a separate thread
 
     marps_app = MarpsApp()
     try:
