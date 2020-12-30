@@ -4,8 +4,10 @@ import time
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from pynput import keyboard
 import gpiozero
@@ -62,14 +64,11 @@ class CartPage(GridLayout):
 
         # And one label with bigger font and centered text
         self.message = Label(halign="center", valign="middle", font_size=30)
-
-        # By default every widget returns it's side as [100, 100], it gets finally resized,
-        # but we have to listen for size change to get a new one
-        # more: https://github.com/kivy/kivy/issues/1044
-        self.message.bind(width=self.update_text_width)
-
+        self.forward = Button(text="Forward")
+        self.forward.bind(on_press=self.getCheckoutPage)
         # Add text widget to the layout
         self.add_widget(self.message)
+        self.add_widget(self.forward)
 
     # Called with a message, to update message text in widget
     def update_rfId(self, message):
@@ -81,9 +80,32 @@ class CartPage(GridLayout):
     def update_company_code(self, message):
         self.message.company_code = message
 
-    # Called on label width update, so we can set text width properly - to 90% of label width
-    def update_text_width(self, *_):
-        self.message.text_size = (self.message.width * 0.9, None)
+    def getCheckoutPage(self, message):
+        marps_app.changePage()
+
+class CheckoutPage(GridLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Just one column
+        self.cols = 1
+
+        self.label = Label(text="Are you sure to checkout? make sure that the fridge is closed properly!")
+        self.forward = Button(text="Yes")
+        self.forward.bind(on_press=self.checkout)
+        self.back = Button(text="No")
+        self.back.bind(on_press=self.getCartPage)
+        # Add text widget to the layout
+        self.add_widget(self.label)
+        self.add_widget(self.forward)
+        self.add_widget(self.back)
+
+    def checkout(self, message):
+
+        marps_app.changePage()
+
+    def getCartPage(self, message):
+        marps_app.getCartPage()
 
 
 class MarpsApp(App):
@@ -110,6 +132,16 @@ class MarpsApp(App):
         screen.add_widget(self.error_page)
         self.screen_manager.add_widget(screen)
 
+        self.co_page = CheckoutPage()
+        screen = Screen(name='Checkout')
+        screen.add_widget(self.co_page)
+        self.screen_manager.add_widget(screen)
+
+        self.ty_page = ThankYouPage()
+        screen = Screen(name='ThankYou')
+        screen.add_widget(self.ty_page)
+        self.screen_manager.add_widget(screen)
+
         self.screen_manager.current = "Welcome"
         return self.screen_manager
 
@@ -119,15 +151,30 @@ class MarpsApp(App):
         return True
 
     def changePage(self):
-        if self.screen_manager.current == "Cart":
+        if self.screen_manager.current == "Checkout":
+            print("checkout -to- welcome")
             self.screen_manager.current = "Welcome"
-            fridge.lock()
-        else:
+            self.resetSession()
+        elif self.screen_manager.current == "Cart":
+            print("cart -to- checkout")
+            self.screen_manager.current = "Checkout"
+        elif self.screen_manager.current == "Welcome":
+            print("welcome -to- cart")
             self.screen_manager.current = "Cart"
             self.cart_page.update_rfId(session["rfId"])
             self.cart_page.update_company_name(session["company_name"])
             fridge.unlock()
+        else:
+            self.resetSession()
+            self.errorPage("No page found returning to Welcome")
 
+    def getCartPage(self):
+            self.screen_manager.current = "Cart"
+
+    def resetSession(self):
+        session["rfId"] = None
+        session["company_name"] = None
+        fridge.lock()
 
     def errorPage(self, message):
         self.error_page.update_message(message)
