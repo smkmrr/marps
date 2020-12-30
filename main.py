@@ -8,6 +8,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import ScreenManager, Screen
 from pynput import keyboard
+import gpiozero
 
 
 class WelcomePage(GridLayout):
@@ -50,6 +51,7 @@ class ErrorPage(GridLayout):
     # Called with a message, to update message text in widget
     def update_message(self, message):
         self.error.text = message
+
 
 class CartPage(GridLayout):
     def __init__(self, **kwargs):
@@ -111,14 +113,21 @@ class MarpsApp(App):
         self.screen_manager.current = "Welcome"
         return self.screen_manager
 
+    def on_request_close(self, *args):
+        fridge.lock()
+        print("EXIT APPs")
+        return True
+
     def changePage(self):
         if self.screen_manager.current == "Cart":
             self.screen_manager.current = "Welcome"
+            fridge.lock()
         else:
             self.screen_manager.current = "Cart"
             self.cart_page.update_rfId(session["rfId"])
             self.cart_page.update_company_name(session["company_name"])
-            # self.cart_page.update_company_code(session["company_code"])
+            fridge.unlock()
+
 
     def errorPage(self, message):
         self.error_page.update_message(message)
@@ -158,8 +167,6 @@ class RfReader():
         session["rfId"] = self.result
         session["company_name"] = database.getCompanyNameByRfId(session["rfId"])
         # session["company_code"] = database.getCompanyCodeByRfId(session["rfId"])
-
-
 
 import pgdb
 
@@ -238,15 +245,43 @@ class PostgresDb():
     #     print(table)
 
 
+class Fridge():
+    # create a relay object.
+    # Triggered by the output pin going low: active_high=False.
+    # Initially off: initial_value=False
+    def __init__(self, **kwargs):
+        self.relay1 = gpiozero.OutputDevice(3, active_high=False, initial_value=False)
+        self.relay2 = gpiozero.OutputDevice(5, active_high=False, initial_value=False)
+        self.lock()
+
+    def lock(self):
+        print("RELAY OFF")
+        self.relay1.off()
+        self.relay2.off()
+
+
+    def unlock(self):
+        print("RELAY ON")
+        self.relay1.on()
+        self.relay2.on()
+
+
 marps_app = None
 session = {}
 database = None
+fridge = None
 
 if __name__ == "__main__":
     database = PostgresDb()
     reader = RfReader()
+    fridge = Fridge()
     listener = keyboard.Listener(on_press=reader.on_press)
     listener.start()  # start to listen on a separate thread
 
     marps_app = MarpsApp()
-    marps_app.run()
+    try:
+        marps_app.run()
+    except KeyboardInterrupt:
+        marps_app.on_request_close()
+        print("\nExiting application\n")
+
